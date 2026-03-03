@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dagens väder – Solna, Stockholm</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 60%, #0f3460 100%);
+      color: white;
+    }
+
+    .card {
+      background: rgba(255,255,255,0.08);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 24px;
+      padding: 48px 56px;
+      text-align: center;
+      max-width: 480px;
+      width: 90%;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.4);
+    }
+
+    .location {
+      font-size: 0.95rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.55);
+      margin-bottom: 8px;
+    }
+
+    .city {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 32px;
+    }
+
+    .weather-icon {
+      font-size: 5rem;
+      line-height: 1;
+      margin-bottom: 16px;
+    }
+
+    .temp {
+      font-size: 5rem;
+      font-weight: 800;
+      letter-spacing: -2px;
+      line-height: 1;
+    }
+
+    .feels {
+      font-size: 0.95rem;
+      color: rgba(255,255,255,0.5);
+      margin-top: 8px;
+    }
+
+    .description {
+      font-size: 1.25rem;
+      font-weight: 500;
+      margin: 20px 0 32px;
+      text-transform: capitalize;
+      color: rgba(255,255,255,0.85);
+    }
+
+    .details {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+      margin-top: 8px;
+    }
+
+    .detail-box {
+      background: rgba(255,255,255,0.07);
+      border-radius: 14px;
+      padding: 14px 10px;
+    }
+
+    .detail-label {
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.45);
+      margin-bottom: 6px;
+    }
+
+    .detail-value {
+      font-size: 1.15rem;
+      font-weight: 600;
+    }
+
+    .updated {
+      margin-top: 28px;
+      font-size: 0.78rem;
+      color: rgba(255,255,255,0.3);
+    }
+
+    .error {
+      color: #ff6b6b;
+      font-size: 1rem;
+      margin-top: 16px;
+    }
+
+    .loading {
+      opacity: 0.5;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="location">Dagens väder</div>
+    <div class="city">Solna, Stockholm</div>
+
+    <div id="weather-icon" class="weather-icon loading">⏳</div>
+    <div id="temp" class="temp loading">--°</div>
+    <div id="feels" class="feels"></div>
+    <div id="description" class="description loading">Hämtar väder...</div>
+
+    <div class="details">
+      <div class="detail-box">
+        <div class="detail-label">💧 Luftfukt.</div>
+        <div class="detail-value" id="humidity">--%</div>
+      </div>
+      <div class="detail-box">
+        <div class="detail-label">💨 Vind</div>
+        <div class="detail-value" id="wind">-- m/s</div>
+      </div>
+      <div class="detail-box">
+        <div class="detail-label">☁️ Moln</div>
+        <div class="detail-value" id="clouds">--%</div>
+      </div>
+    </div>
+
+    <div class="updated" id="updated"></div>
+    <div class="error" id="error"></div>
+  </div>
+
+  <script>
+    // Open-Meteo – gratis, ingen API-nyckel
+    // Koordinater: Solna, Stockholm
+    const LAT = 59.3604;
+    const LON = 18.0007;
+
+    const WMO_CODES = {
+      0:  ['☀️',  'Klart'],
+      1:  ['🌤️', 'Mestadels klart'],
+      2:  ['⛅',  'Halvklart'],
+      3:  ['☁️',  'Mulet'],
+      45: ['🌫️', 'Dimma'],
+      48: ['🌫️', 'Issdimma'],
+      51: ['🌦️', 'Lätt duggregn'],
+      53: ['🌦️', 'Duggregn'],
+      55: ['🌧️', 'Kraftigt duggregn'],
+      61: ['🌧️', 'Lätt regn'],
+      63: ['🌧️', 'Regn'],
+      65: ['🌧️', 'Kraftigt regn'],
+      71: ['🌨️', 'Lätt snö'],
+      73: ['🌨️', 'Snö'],
+      75: ['❄️',  'Kraftigt snöfall'],
+      80: ['🌦️', 'Lätta regnskurar'],
+      81: ['🌧️', 'Regnskurar'],
+      82: ['⛈️',  'Kraftiga skurar'],
+      95: ['⛈️',  'Åska'],
+      99: ['⛈️',  'Åska med hagel'],
+    };
+
+    async function fetchWeather() {
+      try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}`
+          + `&current=temperature_2m,apparent_temperature,relative_humidity_2m,`
+          + `wind_speed_10m,cloud_cover,weather_code`
+          + `&wind_speed_unit=ms&timezone=Europe%2FStockholm`;
+
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('API-fel');
+        const data = await res.json();
+        const c = data.current;
+
+        const code = c.weather_code;
+        const [icon, desc] = WMO_CODES[code] ?? ['🌡️', 'Okänt'];
+
+        document.getElementById('weather-icon').textContent = icon;
+        document.getElementById('weather-icon').classList.remove('loading');
+
+        document.getElementById('temp').textContent = `${Math.round(c.temperature_2m)}°`;
+        document.getElementById('temp').classList.remove('loading');
+
+        document.getElementById('feels').textContent =
+          `Känns som ${Math.round(c.apparent_temperature)}°C`;
+
+        document.getElementById('description').textContent = desc;
+        document.getElementById('description').classList.remove('loading');
+
+        document.getElementById('humidity').textContent = `${c.relative_humidity_2m}%`;
+        document.getElementById('wind').textContent = `${c.wind_speed_10m} m/s`;
+        document.getElementById('clouds').textContent = `${c.cloud_cover}%`;
+
+        const now = new Date();
+        document.getElementById('updated').textContent =
+          `Uppdaterad ${now.toLocaleTimeString('sv-SE', {hour:'2-digit', minute:'2-digit'})}`;
+
+      } catch (e) {
+        document.getElementById('error').textContent = 'Kunde inte hämta väderdata. Försök igen senare.';
+        document.getElementById('weather-icon').textContent = '❌';
+        document.getElementById('weather-icon').classList.remove('loading');
+      }
+    }
+
+    fetchWeather();
+    // Uppdatera var 10:e minut
+    setInterval(fetchWeather, 10 * 60 * 1000);
+  </script>
+</body>
+</html>
