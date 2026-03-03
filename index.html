@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dagens väder – Solna, Stockholm</title>
+  <title>Dagens väder</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -37,10 +37,52 @@
       margin-bottom: 8px;
     }
 
-    .city {
-      font-size: 2rem;
-      font-weight: 700;
+    /* City selector */
+    .city-selector {
+      position: relative;
       margin-bottom: 32px;
+    }
+
+    .city-selector select {
+      appearance: none;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 12px;
+      color: white;
+      font-size: 1.5rem;
+      font-weight: 700;
+      font-family: inherit;
+      padding: 10px 44px 10px 20px;
+      cursor: pointer;
+      width: 100%;
+      text-align: center;
+      transition: background 0.2s;
+    }
+
+    .city-selector select:hover {
+      background: rgba(255,255,255,0.15);
+    }
+
+    .city-selector select:focus {
+      outline: none;
+      border-color: rgba(255,255,255,0.45);
+    }
+
+    .city-selector select option {
+      background: #16213e;
+      color: white;
+      font-size: 1rem;
+    }
+
+    .city-selector::after {
+      content: '▾';
+      position: absolute;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+      color: rgba(255,255,255,0.5);
+      font-size: 1rem;
     }
 
     .weather-icon {
@@ -102,27 +144,35 @@
       color: rgba(255,255,255,0.3);
     }
 
-    .error {
-      color: #ff6b6b;
-      font-size: 1rem;
-      margin-top: 16px;
-    }
+    .error { color: #ff6b6b; font-size: 1rem; margin-top: 16px; }
 
-    .loading {
-      opacity: 0.5;
-      animation: pulse 1.5s ease-in-out infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 0.5; }
-      50% { opacity: 1; }
-    }
+    .loading { opacity: 0.5; animation: pulse 1.5s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{opacity:.5} 50%{opacity:1} }
   </style>
 </head>
 <body>
   <div class="card">
     <div class="location">Dagens väder</div>
-    <div class="city">Solna, Stockholm</div>
+
+    <div class="city-selector">
+      <select id="city-select" onchange="onCityChange()">
+        <option value="59.3604,18.0007">Solna, Stockholm</option>
+        <option value="59.3293,18.0686">Stockholm</option>
+        <option value="57.7089,11.9746">Göteborg</option>
+        <option value="55.6050,13.0038">Malmö</option>
+        <option value="59.8586,17.6389">Uppsala</option>
+        <option value="58.4108,15.6214">Linköping</option>
+        <option value="56.1612,15.5869">Karlskrona</option>
+        <option value="63.8258,20.2630">Umeå</option>
+        <option value="65.5848,22.1547">Luleå</option>
+        <option value="67.8558,20.2253">Kiruna</option>
+        <option value="48.8566,2.3522">Paris, Frankrike</option>
+        <option value="51.5074,-0.1278">London, UK</option>
+        <option value="40.7128,-74.0060">New York, USA</option>
+        <option value="35.6762,139.6503">Tokyo, Japan</option>
+        <option value="25.2048,55.2708">Dubai, UAE</option>
+      </select>
+    </div>
 
     <div id="weather-icon" class="weather-icon loading">⏳</div>
     <div id="temp" class="temp loading">--°</div>
@@ -149,11 +199,6 @@
   </div>
 
   <script>
-    // Open-Meteo – gratis, ingen API-nyckel
-    // Koordinater: Solna, Stockholm
-    const LAT = 59.3604;
-    const LON = 18.0007;
-
     const WMO_CODES = {
       0:  ['☀️',  'Klart'],
       1:  ['🌤️', 'Mestadels klart'],
@@ -177,20 +222,38 @@
       99: ['⛈️',  'Åska med hagel'],
     };
 
+    function setLoading() {
+      ['weather-icon','temp','description'].forEach(id => {
+        document.getElementById(id).classList.add('loading');
+      });
+      document.getElementById('weather-icon').textContent = '⏳';
+      document.getElementById('temp').textContent = '--°';
+      document.getElementById('description').textContent = 'Hämtar väder...';
+      document.getElementById('feels').textContent = '';
+      document.getElementById('humidity').textContent = '--%';
+      document.getElementById('wind').textContent = '-- m/s';
+      document.getElementById('clouds').textContent = '--%';
+      document.getElementById('error').textContent = '';
+    }
+
     async function fetchWeather() {
+      const select = document.getElementById('city-select');
+      const [lat, lon] = select.value.split(',');
+
+      setLoading();
+
       try {
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}`
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`
           + `&current=temperature_2m,apparent_temperature,relative_humidity_2m,`
           + `wind_speed_10m,cloud_cover,weather_code`
-          + `&wind_speed_unit=ms&timezone=Europe%2FStockholm`;
+          + `&wind_speed_unit=ms&timezone=auto`;
 
         const res = await fetch(url);
         if (!res.ok) throw new Error('API-fel');
         const data = await res.json();
         const c = data.current;
 
-        const code = c.weather_code;
-        const [icon, desc] = WMO_CODES[code] ?? ['🌡️', 'Okänt'];
+        const [icon, desc] = WMO_CODES[c.weather_code] ?? ['🌡️', 'Okänt'];
 
         document.getElementById('weather-icon').textContent = icon;
         document.getElementById('weather-icon').classList.remove('loading');
@@ -213,14 +276,17 @@
           `Uppdaterad ${now.toLocaleTimeString('sv-SE', {hour:'2-digit', minute:'2-digit'})}`;
 
       } catch (e) {
-        document.getElementById('error').textContent = 'Kunde inte hämta väderdata. Försök igen senare.';
+        document.getElementById('error').textContent = 'Kunde inte hämta väderdata.';
         document.getElementById('weather-icon').textContent = '❌';
         document.getElementById('weather-icon').classList.remove('loading');
       }
     }
 
+    function onCityChange() {
+      fetchWeather();
+    }
+
     fetchWeather();
-    // Uppdatera var 10:e minut
     setInterval(fetchWeather, 10 * 60 * 1000);
   </script>
 </body>
